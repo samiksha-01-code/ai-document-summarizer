@@ -333,6 +333,21 @@ This project was built to gain practical experience with:
 * Environment variable management
 * Building portfolio-ready AI applications
 
+## Screenshots
+
+### Dashboard
+
+![AI Document Summarizer Dashboard](./screenshots/summary.png)
+
+### Document Processing
+
+![Document Processing](./screenshots/processing.png)
+
+### Analytics and history
+
+![Analytical metrics](./screenshots/analytics.png)
+![History](./screenshots/history.png)
+
 ## Author
 
 **Samiksha Chaudhari**
