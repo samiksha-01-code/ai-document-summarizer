@@ -33,6 +33,7 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".csv"];
 
 const DEFAULT_HISTORY = [];
+const APP_NAME = "AI Document Summarizer";
 
 function getExtension(filename) {
   const dotIndex = filename.lastIndexOf(".");
@@ -88,10 +89,11 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [backendOnline, setBackendOnline] = useState(false);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioStatus, setAudioStatus] = useState("idle");
 
   const fileInputRef = useRef(null);
   const toastTimerRef = useRef(null);
+  const speechUtteranceRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -113,12 +115,17 @@ export default function App() {
 
   useEffect(() => {
     checkBackendHealth();
+
+    // Keep the browser tab branded even when Vite's default template is still
+    // present in index.html during development.
+    document.title = APP_NAME;
   }, []);
 
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       window.speechSynthesis?.cancel();
+      speechUtteranceRef.current = null;
     };
   }, []);
 
@@ -218,28 +225,34 @@ export default function App() {
 
     setIsProcessing(true);
     setProcessingStep(0);
-    setProgressPercent(10);
+    setProgressPercent(8);
 
     let progressTimer;
 
     try {
       const { file, originalLength } = await buildUpload();
 
-      progressTimer = setInterval(() => {
-        setProgressPercent((previous) => {
-          if (previous >= 88) return previous;
-          return previous + 4;
-        });
-
-        setProcessingStep((previous) => {
-          if (previous >= 3) return previous;
-          return previous + 1;
-        });
-      }, 900);
+      // The percentage is intentionally tied to the real processing stages.
+      // The final AI request can take longer than extraction/chunking, so we
+      // keep it in a clear "AI generation" state instead of pretending that
+      // 90% means the request is almost finished.
+      setProgressPercent(18);
+      setProcessingStep(0);
 
       const formData = new FormData();
       formData.append("file", file);
 
+      setProgressPercent(30);
+      setProcessingStep(1);
+
+      progressTimer = setInterval(() => {
+        setProgressPercent((previous) => {
+          if (previous >= 94) return previous;
+          return previous + 2;
+        });
+
+        setProcessingStep((previous) => Math.min(previous + 1, 3));
+      }, 1200);
       const response = await fetch(
         `${API_BASE_URL}/api/v1/documents/summarize`,
         {
@@ -332,26 +345,47 @@ export default function App() {
       return;
     }
 
-    if (isPlayingAudio) {
-      window.speechSynthesis.pause();
-      setIsPlayingAudio(false);
+    const synth = window.speechSynthesis;
+
+    if (audioStatus === "playing") {
+      synth.pause();
+      setAudioStatus("paused");
       return;
     }
 
-    window.speechSynthesis.cancel();
+    if (audioStatus === "paused") {
+      synth.resume();
+      setAudioStatus("playing");
+      return;
+    }
+
+    synth.cancel();
 
     const utterance = new SpeechSynthesisUtterance(currentSummary.content);
     utterance.rate = 1;
-    utterance.onend = () => setIsPlayingAudio(false);
-    utterance.onerror = () => setIsPlayingAudio(false);
 
-    window.speechSynthesis.speak(utterance);
-    setIsPlayingAudio(true);
+    utterance.onstart = () => setAudioStatus("playing");
+    utterance.onpause = () => setAudioStatus("paused");
+    utterance.onresume = () => setAudioStatus("playing");
+    utterance.onend = () => {
+      speechUtteranceRef.current = null;
+      setAudioStatus("idle");
+    };
+    utterance.onerror = () => {
+      speechUtteranceRef.current = null;
+      setAudioStatus("idle");
+    };
+
+    speechUtteranceRef.current = utterance;
+    synth.speak(utterance);
   };
 
   const stopAudio = () => {
-    window.speechSynthesis?.cancel();
-    setIsPlayingAudio(false);
+    if (!("speechSynthesis" in window)) return;
+
+    window.speechSynthesis.cancel();
+    speechUtteranceRef.current = null;
+    setAudioStatus("idle");
   };
 
   const clearHistory = () => {
@@ -729,12 +763,18 @@ export default function App() {
                       />
                     </div>
 
+                    <p className={`mt-3 text-xs ${theme.muted}`}>
+                      {processingStep >= 3
+                        ? "Generating the final AI summary. This step depends on the LLM response and can take longer for large documents."
+                        : "Processing your document. The progress indicator reflects the current processing stage."}
+                    </p>
+
                     <div className="mt-6 space-y-3">
                       {[
                         "Sending document to backend",
                         "Extracting document text",
                         "Chunking document",
-                        "Generating final summary",
+                        "Generating final AI summary",
                       ].map((label, index) => (
                         <div
                           key={label}
@@ -837,9 +877,15 @@ export default function App() {
                           type="button"
                           onClick={toggleAudio}
                           className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white"
-                          title="Read summary aloud"
+                          title={
+                            audioStatus === "playing"
+                              ? "Pause"
+                              : audioStatus === "paused"
+                              ? "Resume"
+                              : "Read summary aloud"
+                          }
                         >
-                          {isPlayingAudio ? (
+                          {audioStatus === "playing" ? (
                             <Pause className="h-4 w-4" />
                           ) : (
                             <Play className="h-4 w-4" />
@@ -855,7 +901,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {isPlayingAudio && (
+                      {audioStatus !== "idle" && (
                         <button
                           type="button"
                           onClick={stopAudio}
