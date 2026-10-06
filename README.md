@@ -256,10 +256,11 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 
 ### Start the Backend
 
-From the project root:
+From the backend root:
 
 ```bash
-uvicorn backend.main:app --reload
+cd backend
+uvicorn main:app --reload
 ```
 
 The API will run at:
