@@ -3,8 +3,8 @@ import tempfile
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
-from backend.services.file_handler import extract_content
-from backend.services.summarizer import summarize_document, MODEL
+from services.file_handler import extract_content
+from services.summarizer import summarize_document, MODEL
 
 
 router = APIRouter(
